@@ -2,11 +2,18 @@
 
 A calm dark theme for the Claude desktop app: a northern night behind the conversation.
 
-![The Nordic night scene: an aurora over snowy mountains, a moon, a pine forest and a lit log cabin with a husky sitting in the snow](assets/nordic-night.png)
+![The Nordic night scene: an aurora and a moon over snowy mountains, a pine forest and a lit log cabin with a husky sitting in the snow](assets/nordic-night.png)
 
-A soft green and violet aurora hangs over snowy mountains, a pine forest and a small log cabin with a lit window. Chimney smoke drifts, a few stars twinkle, and a husky sits in the snow watching the sky. A few times every couple of minutes the husky bolts across the snow and comes back to sit.
+A green and violet aurora hangs over snowy mountains, with a moon, a pine forest and a small log cabin. Someone is working late at a desk behind the lit window, there is a chopping block with an axe by the door, and a husky sits in the snow watching the moon.
 
-A wind blows on a scale from -5 (hard to the left) to 5 (hard to the right). It wanders slowly with the time of day, one level at a time, and it leans and drifts the aurora, bends the smoke and sways the trees; each level also gives the aurora its own length. A moon hangs in the sky where the husky is looking.
+It is a quiet scene, and little of it moves:
+
+- Smoke drifts from the chimney all the time.
+- A gust passes through the trees every minute or minute and a half, and they all sway together for a few seconds.
+- Every 40 to 50 seconds the husky bolts across the snow and comes back to sit. It holds still the rest of the time.
+- Now and then the figure in the window leans in and nods.
+
+A wind blows on a scale from -5 (hard to the left) to 5 (hard to the right). It wanders slowly with the time of day, one level at a time. It leans the aurora and gives it its length, bends the smoke, and sets how hard the trees sway.
 
 Every animation follows the clock rather than starting from zero, so when the app draws the scene again it carries on where it was instead of restarting.
 
@@ -40,6 +47,14 @@ node scene/build-scene.mjs
 
 It writes `hooks/scene.js`. Pass a file name to also save the SVG for a browser preview, and `WIND=-5` to `WIND=5` to pick the wind level of that preview. The interface colors and the glass over the scene are in `hooks/register.tsx`.
 
-One thing worth knowing if you edit the stylesheet: the desktop app stopped animating the whole scene while its stylesheet held a universal selector rule and media queries, so it keeps to class rules and keyframes.
-
 Check a change with `claude plugin validate .` and `claude plugin test .`.
+
+## What the scene costs to draw
+
+An animated backdrop keeps the app's graphics process busy, so the scene is built around what was measured on a Mac while making it. If you change the animations, these are worth knowing:
+
+- A stylesheet with a universal selector rule or media queries stopped every animation of the scene. It keeps to class rules and keyframes.
+- Animating a `transform` made the app repaint the whole scene on every frame, however small the thing that moved. The smoke moves by its circles' `cx`, `cy` and `r` instead, which roughly halved the cost.
+- Animating a gradient's `stop-color` repaints every frame even when it steps once a second. The aurora's colours are fixed.
+- A thing that waits costs nothing if its keyframe holds its value with `steps(1,end)`. That is how the trees and the husky wait between their moments.
+- Small twinkling stars were costly, because each one sat over large star shapes that had to be repainted. The stars are still.

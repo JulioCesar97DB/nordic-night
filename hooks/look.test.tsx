@@ -48,7 +48,7 @@ test('desktop and mobile draw the scene as an SVG within the size limit', async 
 
 test('the scene leaves a clock slot on every animation and the mod fills them', async ($, on) => {
   on('clock.now', () => ({ value: NOW }))
-  expect((SCENE_HEAD.match(/@D[\d.]+@/g) ?? []).length > 40).toBe(true)
+  expect((SCENE_HEAD.match(/@D[\d.]+@/g) ?? []).length > 20).toBe(true)
   const ui = await $.ui.mount({ ...BACKDROP, surface: 'desktop' })
   const svg = await ui.find({ type: 'Svg' })
   const source = String(svg?.props.source ?? '')
@@ -77,7 +77,7 @@ test('every wind level fits the size limit and carries the running husky', async
     const scene = SCENE_HEAD + wind + SCENE_TAIL
 
     expect(scene.length <= 131072).toBe(true)
-    expect(scene.includes('@keyframes tr0{')).toBe(true)
+    expect(scene.includes('@keyframes gust{')).toBe(true)
     expect(scene.includes('@keyframes smkA{')).toBe(true)
   }
   expect(SCENE_HEAD.includes('@WIND@') || SCENE_TAIL.includes('@WIND@')).toBe(false)

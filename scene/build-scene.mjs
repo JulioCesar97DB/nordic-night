@@ -56,8 +56,7 @@ const poly = (pts, close = true) => {
 }
 
 // A smooth loop sampled into keyframes and played in small steps: the eye sees
-// a slow, continuous drift while the page repaints only ~FPS times a second.
-const FPS = 4
+// a slow, continuous drift while the page repaints only a few times a second.
 const css = []
 const anims = []
 // The wind: one value from -1 (hard to the left) to 1 (hard to the right),
@@ -65,15 +64,25 @@ const anims = []
 // gets it (and the aurora's length for that level) and is built per level.
 const windLoops = []
 const windKf = (cls, samples, fn) => windLoops.push({ cls, samples, fn })
-const loop = (cls, dur, fn, { samples = 10, delay = 0, wind = false, fps = FPS } = {}) => {
+const windFrames = [] // { cls, frames(w, len) }: keyframes at their own times
+const windRules = [] // (w, len) => css: what the wind sets and leaves still
+// A frame whose value holds until the next one: nothing is repainted meanwhile.
+const HOLD = ';animation-timing-function:steps(1,end)'
+// What it costs to move something, measured in the desktop app: each frame
+// in which a thing changes, the app repaints every shape whose bounds that
+// thing touches. So the stepped loops share a beat (their durations and delays
+// are whole numbers of `tick`, counted from the same clock) and the sky is
+// repainted twice a second, not once for every loop that happens to step.
+const loop = (cls, dur, fn, { samples = 10, delay = 0, wind = false, tick = 0.5 } = {}) => {
   if (wind) windKf(cls, samples, fn)
   else {
     const frames = []
     for (let i = 0; i <= samples; i++) frames.push([(i / samples) * 100, fn(i / samples)])
     css.push(kf(cls, frames))
   }
-  const steps = Math.max(1, Math.round((dur * fps) / samples))
-  anims.push(`.${cls}{animation:${cls} ${n(dur)}s steps(${steps},end) infinite${delay ? `;animation-delay:-${n(delay)}s` : ''}}`)
+  const steps = Math.max(1, Math.round(dur / (samples * tick)))
+  const beat = Math.round(delay / tick) * tick
+  anims.push(`.${cls}{animation:${cls} ${n(samples * steps * tick)}s steps(${steps},end) infinite${beat ? `;animation-delay:-${n(beat)}s` : ''}}`)
 }
 const wave = t => Math.sin(t * TAU)
 
@@ -103,7 +112,7 @@ const flushDots = () => {
 }
 for (let i = 0; i < 320; i++) {
   const r = rnd()
-  dot(R(0, W), Math.pow(rnd(), 1.35) * 640, rnd() < 0.88 ? pick([1, 1.4, 1.8]) : 2.6, r < 0.7 ? '#dfe8ff' : r < 0.85 ? '#fff1d6' : '#c9ddff', pick([0.3, 0.5, 0.7, 0.85]))
+  dot(R(0, W), Math.pow(rnd(), 1.35) * 540, rnd() < 0.88 ? pick([1, 1.4, 1.8]) : 2.6, r < 0.7 ? '#dfe8ff' : r < 0.85 ? '#fff1d6' : '#c9ddff', pick([0.3, 0.5, 0.7, 0.85]))
 }
 const mw = { x: 520, y: 210, angle: -17 }
 for (let i = 0; i < 300; i++) {
@@ -112,17 +121,15 @@ for (let i = 0; i < 300; i++) {
   const a = (mw.angle * Math.PI) / 180
   const x = mw.x + u * Math.cos(a) - v * Math.sin(a)
   const y = mw.y + u * Math.sin(a) + v * Math.cos(a)
-  if (x < 0 || x > W || y < 0 || y > 620) continue
+  if (x < 0 || x > W || y < 0 || y > 540) continue
   dot(x, y, pick([0.8, 1.1, 1.4]), '#e8eeff', pick([0.2, 0.35, 0.5]))
 }
 const stars = flushDots()
+// A few brighter stars. They hold still: each twinkle made the app repaint the
+// big star shapes around it, which cost a fifth of a processor core.
 let twinkle = ''
 for (let i = 0; i < 10; i++) {
-  const x = R(30, W - 30)
-  const y = R(20, 480)
-  twinkle += `<circle class="tw${i}" cx="${Math.round(x)}" cy="${Math.round(y)}" r="${n(R(0.9, 1.4))}" fill="#eef3ff"/>`
-  const lo = R(0.2, 0.4)
-  loop(`tw${i}`, R(7, 13), t => `opacity:${n(lo + (0.95 - lo) * (0.5 + 0.5 * wave(t)))}`, { samples: 8, delay: R(0, 13) })
+  twinkle += `<circle cx="${Math.round(R(30, W - 30))}" cy="${Math.round(R(20, 480))}" r="${n(R(0.9, 1.4))}" fill="#eef3ff" opacity="${n(R(0.55, 0.95))}"/>`
 }
 const glints = [[1180, 92], [262, 140], [1452, 300], [760, 58]]
   .map(([x, y], i) => `<g opacity="${[0.8, 0.6, 0.55, 0.5][i]}"><circle cx="${x}" cy="${y}" r="5" fill="url(#starGlow)"/><path d="M${x - 7} ${y}h14M${x} ${y - 7}v14" stroke="#eef3ff" stroke-width=".6" opacity=".55"/><circle cx="${x}" cy="${y}" r="1.4" fill="#fff"/></g>`)
@@ -147,30 +154,19 @@ for (const c of curtains) {
     const fold = 0.5 + 0.5 * Math.sin((TAU * x) / c.fold[0] + c.fold[1])
     const ends = Math.min(1, (x - c.x0) / 260, (c.x1 - x) / 260)
     const h = Math.round((c.h[0] + c.h[1] * fold) * R(0.7, 1.15))
-    const a = c.alpha * Math.max(0, ends) * (0.3 + 0.7 * fold) * R(0.45, 1)
-    if (a < 0.03) continue
-    const w = Math.round(c.dx * R(0.9, 1.7))
+    const a = 0.42 * c.alpha * Math.max(0, ends) * (0.3 + 0.7 * fold) * R(0.45, 1)
+    if (a < 0.015) continue
+    const w = Math.round(c.dx * R(2.2, 4.2))
     // A ray is its own box, so the gradient runs from its foot to its tip.
     rays += `<path d="M${Math.round(x - w / 2)} ${Math.round(yb - h)}h${w}v${h}h-${w}z" opacity="${a.toFixed(2).replace(/^0/, '')}"/>`
   }
-  aurora += `<g class="${c.id}d"><g class="${c.id}b"><g class="${c.id}s"><g filter="url(#aur)"><g fill="url(#${c.grad})">${rays}</g></g></g></g></g>`
-  const [dAmp, dDur] = c.drift
-  loop(`${c.id}d`, dDur, (t, w) => `transform:translateX(${n(dAmp * wave(t) + w * 90)}px)`, { delay: R(0, dDur), wind: true })
-  const [lo, hi, bDur] = c.breathe
-  loop(`${c.id}b`, bDur, t => `opacity:${(lo + (hi - lo) * (0.5 + 0.5 * wave(t))).toFixed(2)}`, { samples: 8, delay: R(0, bDur) })
-  const [sk, sDur] = c.sway
-  const [s0, s1] = c.stretch
-  // Sway and stretch in one loop: two waves at different speeds read as a living curtain.
-  loop(`${c.id}s`, sDur, (t, w, len) => `transform:skewX(${n(-w * 16 + sk * (1 + Math.abs(w)) * wave(t))}deg) scaleY(${(len * (s0 + (s1 - s0) * (0.5 + 0.5 * wave(t * 2 + 0.25)))).toFixed(3)})`, { samples: 14, delay: R(0, sDur), wind: true })
+  aurora += `<g class="${c.id}d"><g class="${c.id}b"><g class="${c.id}s"><g fill="url(#${c.grad})">${rays}</g></g></g></g>`
+  windRules.push((w, len) => `.${c.id}d{transform:translateX(${Math.round(w * 90)}px)}.${c.id}s{transform:skewX(${n(-w * 16)}deg) scaleY(${len})}`)
   anims.push(`.${c.id}s{transform-origin:800px ${c.y0}px}`)
 }
 const auroraGlow = `<g class="glowA"><ellipse cx="520" cy="470" rx="720" ry="230" fill="url(#glowGreen)"/><ellipse cx="760" cy="660" rx="1050" ry="150" fill="url(#glowGreen)"/></g><g class="glowB"><ellipse cx="1150" cy="360" rx="620" ry="210" fill="url(#glowViolet)"/></g>`
-loop('glowA', 43, t => `opacity:${(0.8 + 0.15 * (0.5 + 0.5 * wave(t))).toFixed(2)}`, { samples: 8 })
-loop('glowB', 61, t => `opacity:${(0.7 + 0.15 * (0.5 + 0.5 * wave(t + 0.3))).toFixed(2)}`, { samples: 8 })
-// The colours drift too, very slowly: the curtain tops wander between violet and teal.
-css.push(kf('hue1', [[0, 'stop-color:#7a5cff'], [25, 'stop-color:#5f7dff'], [50, 'stop-color:#3fc6d8'], [75, 'stop-color:#5f7dff'], [100, 'stop-color:#7a5cff']]))
-css.push(kf('hue2', [[0, 'stop-color:#c07bff'], [25, 'stop-color:#e07bd0'], [50, 'stop-color:#8a8cff'], [100, 'stop-color:#c07bff']]))
-anims.push('.hue1{animation:hue1 150s steps(75,end) infinite}.hue2{animation:hue2 190s steps(95,end) infinite}')
+
+
 
 // ---------- mountains ----------
 // A ridge: peaks shaped like worn pyramids plus layered noise for the rock.
@@ -314,9 +310,32 @@ const treeRow = (from, to, count, hMin, hMax, yOff, withSnow) => {
 }
 const back = [treeRow(-30, 420, 24, 70, 150, -8, false), treeRow(1290, 1640, 20, 70, 150, -8, false), treeRow(560, 760, 5, 40, 70, -6, false)]
 const front = [treeRow(-40, 330, 13, 150, 260, 6, true), treeRow(1360, 1650, 11, 150, 250, 6, true)]
+// The trees lean a little into the wind and stand still, until a gust passes
+// and they all sway together for a few seconds, swelling and dying away. The
+// gusts come a minute and a minute and a half apart, in turn.
+const GUST_CYCLE = 150 // s
+const GUST_LENGTH = 8 // s
+const GUST_STARTS = [10, 70] // s into the cycle: 60 s apart, then 90 s
+windFrames.push({
+  cls: 'gust',
+  frames: w => {
+    const lean = -w * 1.6
+    const sway = 0.5 + 1.3 * Math.abs(w)
+    const at = v => `transform:skewX(${v.toFixed(2)}deg)`
+    const f = [[0, at(lean) + HOLD]]
+    const N = 22
+    for (const start of GUST_STARTS) {
+      for (let j = 0; j <= N; j++) {
+        const u = j / N
+        f.push([((start + GUST_LENGTH * u) / GUST_CYCLE) * 100, at(lean + sway * Math.sin(Math.PI * u) * Math.sin(u * TAU * 3.5)) + (j === N ? HOLD : '')])
+      }
+    }
+    f.push([100, at(lean)])
+    return f
+  },
+})
+anims.push(`.tr0,.tr1,.tr2,.tr3,.tr4{animation:gust ${GUST_CYCLE}s ease-in-out infinite}`)
 const stand = (k, row, cx, fill, withSnow) => {
-  const dur = [6.4, 7.6, 5.2, 7, 5.8][k]
-  loop(`tr${k}`, dur, (t, w) => `transform:skewX(${(-w * 1.6 + (0.25 + 1.1 * Math.abs(w)) * (0.7 * wave(t) + 0.3 * wave(t * 3 + 0.2))).toFixed(2)}deg)`, { samples: 12, delay: k * 1.3, wind: true, fps: 10 })
   anims.push(`.tr${k}{transform-origin:${cx}px ${Math.round(groundY(cx))}px}`)
   return `<g class="tr${k}"><path d="${row.body}" fill="${fill}"/>${withSnow ? `<path d="${row.snow}" fill="#8299b8" opacity=".42"/>` : ''}</g>`
 }
@@ -362,6 +381,24 @@ for (let k = 0; k < 14; k++) {
   const py = cy + 6 + Math.sin(t * Math.PI) * 14 + (hy - cy) * t
   steps += `<ellipse cx="${Math.round(px + (k % 2 ? 4 : -4))}" cy="${Math.round(py)}" rx="3.4" ry="1.6"/>`
 }
+const bx = cx + 92
+const by = Math.round(groundY(bx)) + 3
+const chopping = `
+<ellipse cx="${bx + 4}" cy="${by + 2}" rx="34" ry="5" fill="#05080f" opacity=".45"/>
+<g stroke="#140f0b" stroke-width="1">
+  <path d="M${bx - 28} ${by - 3}l13-5 3 6-13 5z" fill="#4a3526"/><path d="M${bx - 28} ${by - 3}l13-5-1-2-13 5z" fill="#c9a877"/>
+  <path d="M${bx + 16} ${by - 1}l14-3 2 6-14 3z" fill="#3f2d20"/><path d="M${bx + 16} ${by - 1}l14-3-1-3-14 3z" fill="#d2b282"/>
+  <path d="M${bx + 20} ${by - 9}l11 3-2 5-11-3z" fill="#4a3526"/>
+  <path d="M${bx - 11} ${by - 16}v16h22v-16z" fill="#3a2a1f"/>
+  <ellipse cx="${bx}" cy="${by - 16}" rx="11" ry="3.6" fill="#c2a172"/>
+</g>
+<ellipse cx="${bx}" cy="${by - 16}" rx="6.5" ry="2" fill="none" stroke="#8c6f48" stroke-width=".8"/>
+<path d="M${bx - 11} ${by - 11}v9M${bx - 5} ${by - 12}v11M${bx + 4} ${by - 12}v11" stroke="#241912" stroke-width="1"/>
+<path d="M${bx + 1} ${by - 18}L${bx + 21} ${by - 44}" stroke="#140f0b" stroke-width="4.4" stroke-linecap="round"/>
+<path d="M${bx + 1} ${by - 18}L${bx + 21} ${by - 44}" stroke="#a9773f" stroke-width="2.6" stroke-linecap="round"/>
+<path d="M${bx - 6} ${by - 17}l4-9 9 5-3 6z" fill="#8a97a8" stroke="#140f0b" stroke-width="1"/>
+<path d="M${bx - 6} ${by - 17}l4-9 2 1-4 9z" fill="#dfe6ee"/>
+<path d="M${bx - 30} ${by - 4}l12-5 2 2-12 5zM${bx + 15} ${by - 2}l14-3 1 2-14 3zM${bx - 9} ${by - 1}q9 4 20 0l2 3h-24z" fill="#9fb4d0" opacity=".85"/>`
 const cabin = `
 <ellipse cx="${cx - 10}" cy="${cy + 12}" rx="170" ry="30" fill="url(#warmSpill)"/>
 <g class="win"><circle cx="${cx - 26}" cy="${cy - 30}" r="90" fill="url(#warmGlow)"/></g>
@@ -376,12 +413,18 @@ const cabin = `
 <path d="${poly([[cx - 16, wall.t + 2], [cx, roofPeak[1] + 16], [cx + 16, wall.t + 2]])}" fill="#1c1612"/>
 <path d="${snowRoof}" fill="url(#roofSnow)"/>
 <path d="${icicles}" fill="#a9c2df" opacity=".7"/>
-<g class="win">
-  <rect x="${cx - 40}" y="${cy - 40}" width="28" height="22" fill="url(#windowLight)"/>
-  <path d="M${cx - 26} ${cy - 40}v22M${cx - 40} ${cy - 29}h28" stroke="#3a2416" stroke-width="2.2"/>
-  <rect x="${cx - 40}" y="${cy - 40}" width="28" height="22" fill="none" stroke="#2a1a10" stroke-width="2.4"/>
+<g class="win"><rect x="${cx - 46}" y="${cy - 45}" width="36" height="27" fill="url(#windowLight)"/></g>
+<g transform="translate(${cx - 46} ${cy - 45})">
+  <rect class="screen" x="24.9" y="7.6" width="2" height="9.6" fill="#cfe6ff"/>
+  <path d="M0 20.5h36v6.5h-36zM25.5 20.5v-3.4h1.3v-9.8h3.4v9.8h1.3v3.4z" fill="#1a0f08"/>
+  <g class="worker">
+    <path d="M9.5 27V19C9.5 14.6 11.5 12.6 14.8 12.6C17.6 12.6 19.4 14.2 20 17L24.4 18.7V20.5H17.5V27Z" fill="#1a0f08"/>
+    <g class="nod"><circle cx="15.6" cy="8.3" r="3.5" fill="#1a0f08"/><path d="M12.3 7.2C12.6 4.4 15 3.6 17 4.2" stroke="#1a0f08" stroke-width="1.6" fill="none"/></g>
+  </g>
+  <path d="M5.5 27V15.5C5.5 13.8 6.5 13 8 13V27Z" fill="#120a05"/>
+  <rect width="36" height="27" fill="none" stroke="#2a1a10" stroke-width="2.6"/>
 </g>
-<path d="${poly([[cx - 44, cy - 17], [cx - 8, cy - 17], [cx - 9, cy - 21], [cx - 26, cy - 23], [cx - 43, cy - 21]])}" fill="#9fb4d0"/>
+<path d="${poly([[cx - 50, cy - 17], [cx - 6, cy - 17], [cx - 7, cy - 21], [cx - 28, cy - 23], [cx - 49, cy - 21]])}" fill="#9fb4d0"/>
 <rect x="${door.x}" y="${cy - 38}" width="${door.w}" height="38" fill="#0c0907"/>
 <path d="M${door.x + 7} ${cy - 38}v38M${door.x + 14} ${cy - 38}v38" stroke="#1a130f" stroke-width="1.4"/>
 <circle cx="${door.x + 18}" cy="${cy - 18}" r="1.3" fill="#c79a5a"/>
@@ -389,28 +432,36 @@ const cabin = `
 <g fill="#3a2a1f" stroke="#140f0b" stroke-width="1">${wood(wall.l - 30, cy - 4)}</g>
 <path d="${poly([[wall.l - 34, cy - 20], [wall.l - 22, cy - 26], [wall.l - 6, cy - 24], [wall.l + 2, cy - 18], [wall.l - 4, cy - 17], [wall.l - 30, cy - 17]])}" fill="#8ea6c4"/>
 <path d="${poly([[wall.l - 50, cy + 6], [wall.l - 30, cy - 6], [wall.l + 10, cy - 4], [cx - 10, cy - 2], [wall.r - 10, cy - 3], [wall.r + 14, cy - 6], [wall.r + 40, cy + 6]])}" fill="url(#drift)"/>`
-loop('win', 6, t => `opacity:${n(0.84 + 0.16 * (0.5 + 0.5 * wave(t)) - 0.05 * (0.5 + 0.5 * wave(t * 3)))}`, { samples: 12 })
-loop('lamp', 3.4, t => `opacity:${n(0.85 + 0.15 * (0.5 + 0.5 * wave(t)))}`, { samples: 8 })
-// Chimney smoke: eight soft puffs share two smooth (unstepped) paths. Each
-// rises, drifts with the wind in a slow curl, swells and thins out.
+// Whoever is inside leans in, nods now and then and sits back. The cabin's lights are steady.
+css.push(
+  kf('worker', [[0, 'transform:translateX(0px)' + HOLD], [55, 'transform:translateX(0px)'], [58, 'transform:translateX(1.2px)' + HOLD], [80, 'transform:translateX(1.2px)'], [83, 'transform:translateX(0px)' + HOLD], [100, 'transform:translateX(0px)']]),
+  kf('nod', [[0, 'transform:translateY(0px)' + HOLD], [30, 'transform:translateY(0px)'], [31.5, 'transform:translateY(1px)'], [33, 'transform:translateY(0px)'], [34.5, 'transform:translateY(1px)'], [36, 'transform:translateY(0px)' + HOLD], [100, 'transform:translateY(0px)']]),
+)
+anims.push('.worker{animation:worker 41s ease-in-out infinite}.nod{animation:nod 29s ease-in-out infinite}')
+// Chimney smoke: ten soft puffs share two smooth (unstepped) paths. Each rises,
+// drifts with the wind in a slow curl, swells and thins out. A puff moves by
+// its own centre and radius, not by a transform: the app then repaints only
+// the small patch the puff covers, where a transformed one made it repaint the
+// whole scene on every frame.
 let smoke = ''
+const sx = cx + 41
+const sy = cy - 122
 const plume = (name, spread, curl) =>
   windKf(name, 12, (t, w) => {
     const x = (w * 125 + spread) * Math.pow(t, 1.3) + curl * Math.sin(t * 5.2) * t
     const y = -150 * (1 - 0.4 * Math.abs(w)) * Math.pow(t, 0.85)
     const fade = t < 0.12 ? t / 0.12 : Math.pow(1 - t, 1.4) / Math.pow(0.88, 1.4)
-    return `transform:translate(${n(x)}px,${n(y)}px) scale(${n(0.45 + 2.4 * t)});opacity:${(0.5 * fade).toFixed(2)}`
+    return `cx:${n(sx + x)}px;cy:${n(sy + y)}px;r:${n(11 * (0.45 + 2.4 * t))}px;opacity:${(0.55 * fade).toFixed(2)}`
   })
 plume('smkA', -10, 9)
 plume('smkB', 8, -7)
 const SMOKE = 22
-for (let i = 0; i < 8; i++) {
-  const big = 7 + (i % 3) * 2
+for (let i = 0; i < 10; i++) {
   // per-puff rules instead of style attributes, which a surface may strip
-  anims.push(`.sm${i}{animation-name:smk${i % 2 ? 'B' : 'A'};animation-delay:-${n((i * SMOKE) / 8)}s}`)
-  smoke += `<g class="sm sm${i}"><circle cx="${cx + 41 + (i % 2 ? 2 : -2)}" cy="${cy - 121}" r="${big}" fill="url(#smoke)"/><circle cx="${cx + 41 + (i % 2 ? -3 : 4)}" cy="${cy - 125}" r="${big - 2}" fill="url(#smoke)"/></g>`
+  anims.push(`.sm${i}{animation-name:smk${i % 2 ? 'B' : 'A'};animation-delay:-${n((i * SMOKE) / 10)}s}`)
+  smoke += `<circle class="sm sm${i}" cx="${sx}" cy="${sy}" r="5" fill="url(#smoke)"/>`
 }
-anims.push(`.sm{transform-box:fill-box;transform-origin:center;opacity:0;animation-duration:${SMOKE}s;animation-timing-function:linear;animation-iteration-count:infinite}`)
+anims.push(`.sm{opacity:0;animation-duration:${SMOKE}s;animation-timing-function:linear;animation-iteration-count:infinite}`)
 
 // ---------- the husky ----------
 // Sitting in the snow in profile, head raised to the sky: grey saddle, white
@@ -448,14 +499,6 @@ const husky = `<g transform="translate(${hx} ${hy}) scale(.6)">
 </g>
 </g>`
 
-// The sitting husky is alive: it breathes, sweeps its tail over the snow now
-// and then, and flicks an ear.
-css.push(
-  kf('hBreathe', [[0, 'transform:scale(1,1)'], [50, 'transform:scale(1.006,1.018)'], [100, 'transform:scale(1,1)']]),
-  kf('hTail', [[0, 'transform:rotate(0deg)'], [62, 'transform:rotate(0deg)'], [68, 'transform:rotate(9deg)'], [76, 'transform:rotate(-5deg)'], [84, 'transform:rotate(7deg)'], [92, 'transform:rotate(-2deg)'], [100, 'transform:rotate(0deg)']]),
-  kf('hEar', [[0, 'transform:rotate(0deg)'], [90, 'transform:rotate(0deg)'], [92.5, 'transform:rotate(-16deg)'], [95, 'transform:rotate(3deg)'], [97, 'transform:rotate(-9deg)'], [100, 'transform:rotate(0deg)']]),
-)
-anims.push('.hBreathe{animation:hBreathe 4.2s ease-in-out infinite}.hTail{animation:hTail 17s ease-in-out infinite}.hEar{animation:hEar 11s ease-in-out infinite}')
 
 // ---------- the husky's zoomies ----------
 // Now and then the husky bolts: to the far left and back, to the far right and
@@ -466,17 +509,20 @@ anims.push('.hBreathe{animation:hBreathe 4.2s ease-in-out infinite}.hTail{animat
 // QUICK=1 packs the same three runs into 30 seconds, starting 3 seconds in,
 // to check at a glance that a surface plays them.
 const QUICK = process.env.QUICK === '1'
-const RUN = QUICK ? 30 : 150 // s, one cycle of zoomies
-const [s1, s2, s3] = QUICK ? [3, 13, 22] : [22, 79, 121]
+const RUN = QUICK ? 30 : 180 // s, one cycle of zoomies
+const [s1, s2, s3, s4] = QUICK ? [3, 11, 18, 25] : [20, 62, 108, 151]
+// Four runs in three minutes, 40 to 50 seconds apart. A run repaints the whole
+// scene while it lasts, so together they are kept to about a tenth of the time.
 const runs = [
   { start: s1, legs: [[-110, 3.0], ['wait', 1.4], [hx, 3.0]] },
-  { start: s2, legs: [[1720, 1.5], ['wait', 2.2], [hx, 1.5]] },
-  { start: s3, legs: [[900, 0.6], [1190, 0.75], [960, 0.6], [hx, 0.45]] },
+  { start: s2, legs: [[900, 0.6], [1190, 0.75], [960, 0.6], [hx, 0.45]] },
+  { start: s3, legs: [[1720, 1.5], ['wait', 2.2], [hx, 1.5]] },
+  { start: s4, legs: [[820, 0.9], [hx, 0.9]] },
 ]
 const kf3 = (name, frames) => `@keyframes ${name}{${frames.map(([p, c]) => `${p.toFixed(3).replace(/\.?0+$/, '')}%{${c}}`).join('')}}`
 const pct = t => (t / RUN) * 100
 const at = (x, dir) => `transform:translate(${Math.round(x - hx)}px,${n(groundY(x) - groundY(hx))}px) scaleX(${dir})`
-const pathFrames = [[0, at(hx, 1)]]
+const pathFrames = [[0, at(hx, 1) + HOLD]]
 const runWindows = []
 for (const run of runs) {
   let t = run.start
@@ -499,7 +545,7 @@ for (const run of runs) {
     t += dur
     x = to
   }
-  pathFrames.push([pct(t) + 0.003, at(hx, 1)])
+  pathFrames.push([pct(t) + 0.003, at(hx, 1) + HOLD])
   runWindows.push([pct(run.start), pct(t) + 0.003])
 }
 pathFrames.push([100, at(hx, 1)])
@@ -626,7 +672,6 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" pre
   <linearGradient id="ag1" x1="0" y1="0" x2="0" y2="1"><stop class="hue1" offset="0" stop-color="#7a5cff" stop-opacity="0"/><stop class="hue1" offset=".32" stop-color="#7a5cff" stop-opacity=".16"/><stop offset=".58" stop-color="#3fd0c4" stop-opacity=".42"/><stop offset=".78" stop-color="#4cf0a2" stop-opacity=".8"/><stop offset=".88" stop-color="#9df7cd" stop-opacity=".7"/><stop offset="1" stop-color="#9df7cd" stop-opacity="0"/></linearGradient>
   <linearGradient id="ag2" x1="0" y1="0" x2="0" y2="1"><stop class="hue2" offset="0" stop-color="#c07bff" stop-opacity="0"/><stop class="hue2" offset=".38" stop-color="#c07bff" stop-opacity=".3"/><stop offset=".68" stop-color="#6ab8e8" stop-opacity=".38"/><stop offset=".84" stop-color="#6cf0b8" stop-opacity=".62"/><stop offset="1" stop-color="#6cf0b8" stop-opacity="0"/></linearGradient>
   <linearGradient id="ag3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4de8a0" stop-opacity="0"/><stop offset=".5" stop-color="#4de8a0" stop-opacity=".42"/><stop offset=".8" stop-color="#9df7cd" stop-opacity=".8"/><stop offset="1" stop-color="#9df7cd" stop-opacity="0"/></linearGradient>
-  <filter id="aur" x="-5%" y="-60%" width="110%" height="220%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="5 12" result="fine"/><feGaussianBlur in="SourceGraphic" stdDeviation="26" result="wide"/><feMerge><feMergeNode in="wide"/><feMergeNode in="fine"/></feMerge></filter>
   <radialGradient id="glowGreen"><stop offset="0" stop-color="#2fd39a" stop-opacity=".2"/><stop offset="1" stop-color="#2fd39a" stop-opacity="0"/></radialGradient>
   <radialGradient id="glowViolet"><stop offset="0" stop-color="#7d63ff" stop-opacity=".12"/><stop offset="1" stop-color="#7d63ff" stop-opacity="0"/></radialGradient>
   <linearGradient id="farFill" gradientUnits="userSpaceOnUse" x1="0" y1="470" x2="0" y2="780"><stop offset="0" stop-color="#2a3d54"/><stop offset=".25" stop-color="#1c2b40"/><stop offset=".6" stop-color="#152236"/><stop offset="1" stop-color="#111a29"/></linearGradient>
@@ -659,7 +704,7 @@ ${sky}
   <path d="${poly(groundPts, false)}" fill="none" stroke="#4d6585" stroke-width="1.5" opacity=".45"/>
   <g fill="#3a4e6c" opacity=".25">${mounds}</g>
   ${sparkles}
-  <g class="homestead">${cabin}${smoke}<g class="hSit">${husky}</g>${runner}</g>
+  <g class="homestead">${cabin}${chopping}${smoke}<g class="hSit">${husky}</g>${runner}</g>
   ${frontPines}
 </g>
 <rect width="${W}" height="${H}" fill="url(#vignette)"/>
@@ -675,7 +720,11 @@ if (svg.includes('`') || svg.includes('${')) throw new Error('the scene cannot c
 const AURORA_LENGTH = Array.from({ length: 11 }, (_, i) => +(1.02 + 0.2 * Math.cos((i * Math.PI) / 5 + 0.6)).toFixed(2))
 const WINDS = AURORA_LENGTH.map((len, i) => {
   const w = (i - 5) / 5
-  return windLoops.map(({ cls, samples, fn }) => kf(cls, Array.from({ length: samples + 1 }, (_, k) => [(k / samples) * 100, fn(k / samples, w, len)]))).join('')
+  return (
+    windRules.map(rule => rule(w, len)).join('') +
+    windFrames.map(({ cls, frames }) => kf3(cls, frames(w, len))).join('') +
+    windLoops.map(({ cls, samples, fn }) => kf(cls, Array.from({ length: samples + 1 }, (_, k) => [(k / samples) * 100, fn(k / samples, w, len)]))).join('')
+  )
 })
 const [HEAD, TAIL] = svg.split('@WIND@')
 const longest = Math.max(...WINDS.map(css => HEAD.length + css.length + TAIL.length))
