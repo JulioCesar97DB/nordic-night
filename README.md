@@ -58,3 +58,7 @@ An animated backdrop keeps the app's graphics process busy, so the scene is buil
 - Animating a gradient's `stop-color` repaints every frame even when it steps once a second. The aurora's colours are fixed.
 - A thing that waits costs nothing if its keyframe holds its value with `steps(1,end)`. That is how the trees and the husky wait between their moments.
 - Small twinkling stars were costly, because each one sat over large star shapes that had to be repainted. The stars are still.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

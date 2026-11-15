@@ -1,5 +1,6 @@
 {
   "name": "nordic-night",
   "version": "1.2.0",
-  "description": "A calm dark theme: a northern night with an aurora and a moon over snowy mountains, a pine forest and a lit log cabin with a husky."
+  "description": "A calm dark theme: a northern night with an aurora and a moon over snowy mountains, a pine forest and a lit log cabin with a husky.",
+  "license": "MIT"
 }
