@@ -1,0 +1,5 @@
+{
+  "name": "nordic-night",
+  "owner": { "name": "JulioCesar97DB" },
+  "plugins": [{ "name": "nordic-night", "source": "./" }]
+}
