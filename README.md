@@ -2,6 +2,8 @@
 
 A calm dark theme for the Claude desktop app: a northern night behind the conversation.
 
+![The Nordic night scene: an aurora over snowy mountains, a moon, a pine forest and a lit log cabin with a husky sitting in the snow](assets/nordic-night.png)
+
 A soft green and violet aurora hangs over snowy mountains, a pine forest and a small log cabin with a lit window. Chimney smoke drifts, a few stars twinkle, and a husky sits in the snow watching the sky. A few times every couple of minutes the husky bolts across the snow and comes back to sit.
 
 A wind blows on a scale from -5 (hard to the left) to 5 (hard to the right). It wanders slowly with the time of day, one level at a time, and it leans and drifts the aurora, bends the smoke and sways the trees; each level also gives the aurora its own length. A moon hangs in the sky where the husky is looking.
