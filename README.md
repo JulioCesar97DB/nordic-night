@@ -4,7 +4,9 @@ A calm dark theme for the Claude desktop app: a northern night behind the conver
 
 A soft green and violet aurora hangs over snowy mountains, a pine forest and a small log cabin with a lit window. Chimney smoke drifts, a few stars twinkle, and a husky sits in the snow watching the sky. A few times every couple of minutes the husky bolts across the snow and comes back to sit.
 
-Each time the theme loads it draws a random wind, on a scale from -5 (hard to the left) to 5 (hard to the right). The wind leans and drifts the aurora, bends the smoke and sways the trees, and each level gives the aurora its own length.
+A wind blows on a scale from -5 (hard to the left) to 5 (hard to the right). It wanders slowly with the time of day, one level at a time, and it leans and drifts the aurora, bends the smoke and sways the trees; each level also gives the aurora its own length. A moon hangs in the sky where the husky is looking.
+
+Every animation follows the clock rather than starting from zero, so when the app draws the scene again it carries on where it was instead of restarting.
 
 The interface gets a matching palette: slate-blue night surfaces, cool white text, and the aurora's hues for accents.
 

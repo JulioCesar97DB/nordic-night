@@ -73,7 +73,7 @@ const loop = (cls, dur, fn, { samples = 10, delay = 0, wind = false, fps = FPS }
     css.push(kf(cls, frames))
   }
   const steps = Math.max(1, Math.round((dur * fps) / samples))
-  anims.push(`.${cls}{animation:${cls} ${dur}s steps(${steps},end) infinite${delay ? `;animation-delay:-${n(delay)}s` : ''}}`)
+  anims.push(`.${cls}{animation:${cls} ${n(dur)}s steps(${steps},end) infinite${delay ? `;animation-delay:-${n(delay)}s` : ''}}`)
 }
 const wave = t => Math.sin(t * TAU)
 
@@ -127,7 +127,8 @@ for (let i = 0; i < 10; i++) {
 const glints = [[1180, 92], [262, 140], [1452, 300], [760, 58]]
   .map(([x, y], i) => `<g opacity="${[0.8, 0.6, 0.55, 0.5][i]}"><circle cx="${x}" cy="${y}" r="5" fill="url(#starGlow)"/><path d="M${x - 7} ${y}h14M${x} ${y - 7}v14" stroke="#eef3ff" stroke-width=".6" opacity=".55"/><circle cx="${x}" cy="${y}" r="1.4" fill="#fff"/></g>`)
   .join('')
-const starsLayer = `<g transform="rotate(${mw.angle} ${mw.x} ${mw.y})"><ellipse cx="${mw.x}" cy="${mw.y}" rx="980" ry="120" fill="url(#milky)"/><ellipse cx="${mw.x + 80}" cy="${mw.y + 8}" rx="620" ry="46" fill="url(#milkyCore)"/></g>${stars}${twinkle}${glints}`
+const moon = `<circle cx="380" cy="150" r="120" fill="url(#moonHalo)"/><circle cx="380" cy="150" r="33" fill="url(#moonDisc)"/><g fill="#8e97a8" opacity=".3"><ellipse cx="370" cy="138" rx="9" ry="7"/><ellipse cx="389" cy="145" rx="6" ry="8"/><ellipse cx="376" cy="162" rx="8" ry="5"/><circle cx="393" cy="164" r="3.5"/><circle cx="362" cy="154" r="3"/></g><circle cx="380" cy="150" r="33" fill="url(#moonShade)"/>`
+const starsLayer = `<g transform="rotate(${mw.angle} ${mw.x} ${mw.y})"><ellipse cx="${mw.x}" cy="${mw.y}" rx="980" ry="120" fill="url(#milky)"/><ellipse cx="${mw.x + 80}" cy="${mw.y + 8}" rx="620" ry="46" fill="url(#milkyCore)"/></g>${stars}${twinkle}${glints}${moon}`
 
 // ---------- aurora ----------
 // Each curtain is a row of thin vertical rays standing on a wavy baseline,
@@ -604,13 +605,23 @@ if (STILL) {
 // held the general rules this scene used to have: `*{transform-box:view-box}`,
 // two aspect-ratio media queries and a prefers-reduced-motion query. Which of
 // them does it was not narrowed down; without all three the scene animates.
-const style = `.hRunGate{opacity:0}${anims.join('')}${css.join('')}@WIND@`
+// Every animation starts from the wall clock, not from zero: each rule's delay
+// is left as a slot, @D<seconds>@, that the mod fills with that many seconds
+// plus the time of day. A scene that is drawn again (the app redraws it now and
+// then) picks up exactly where the clock says, instead of starting over.
+const timed = anims.join('')
+  .replace(/animation-delay:-([\d.]+)s/g, 'animation-delay:@D$1@')
+  .replace(/\{([^{}]*)\}/g, (rule, body) => (/animation(-name)?:/.test(body) && !body.includes('animation-delay') ? `{${body};animation-delay:@D0@}` : rule))
+const style = `.hRunGate{opacity:0}${timed}${css.join('')}@WIND@`
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice">
 <defs>
   <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#04060c"/><stop offset=".4" stop-color="#080d1a"/><stop offset=".7" stop-color="#0f1626"/><stop offset="1" stop-color="#172033"/></linearGradient>
   <radialGradient id="horizon"><stop offset="0" stop-color="#2b3a56" stop-opacity=".55"/><stop offset="1" stop-color="#2b3a56" stop-opacity="0"/></radialGradient>
   <radialGradient id="milky"><stop offset="0" stop-color="#9fb2d6" stop-opacity=".09"/><stop offset=".6" stop-color="#9fb2d6" stop-opacity=".04"/><stop offset="1" stop-color="#9fb2d6" stop-opacity="0"/></radialGradient>
   <radialGradient id="milkyCore"><stop offset="0" stop-color="#d9d2ff" stop-opacity=".07"/><stop offset="1" stop-color="#d9d2ff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="moonHalo"><stop offset="0" stop-color="#dfe6f5" stop-opacity=".32"/><stop offset=".28" stop-color="#c9d4ea" stop-opacity=".12"/><stop offset="1" stop-color="#c9d4ea" stop-opacity="0"/></radialGradient>
+  <radialGradient id="moonDisc" cx=".4" cy=".38" r=".75"><stop offset="0" stop-color="#fbf8ec"/><stop offset=".7" stop-color="#e3e4e0"/><stop offset="1" stop-color="#b9c0cc"/></radialGradient>
+  <radialGradient id="moonShade" cx=".28" cy=".4" r=".85"><stop offset=".62" stop-color="#0a1020" stop-opacity="0"/><stop offset="1" stop-color="#0a1020" stop-opacity=".78"/></radialGradient>
   <radialGradient id="starGlow"><stop offset="0" stop-color="#eef3ff" stop-opacity=".7"/><stop offset="1" stop-color="#eef3ff" stop-opacity="0"/></radialGradient>
   <linearGradient id="ag1" x1="0" y1="0" x2="0" y2="1"><stop class="hue1" offset="0" stop-color="#7a5cff" stop-opacity="0"/><stop class="hue1" offset=".32" stop-color="#7a5cff" stop-opacity=".16"/><stop offset=".58" stop-color="#3fd0c4" stop-opacity=".42"/><stop offset=".78" stop-color="#4cf0a2" stop-opacity=".8"/><stop offset=".88" stop-color="#9df7cd" stop-opacity=".7"/><stop offset="1" stop-color="#9df7cd" stop-opacity="0"/></linearGradient>
   <linearGradient id="ag2" x1="0" y1="0" x2="0" y2="1"><stop class="hue2" offset="0" stop-color="#c07bff" stop-opacity="0"/><stop class="hue2" offset=".38" stop-color="#c07bff" stop-opacity=".3"/><stop offset=".68" stop-color="#6ab8e8" stop-opacity=".38"/><stop offset=".84" stop-color="#6cf0b8" stop-opacity=".62"/><stop offset="1" stop-color="#6cf0b8" stop-opacity="0"/></linearGradient>
@@ -632,7 +643,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" pre
   <linearGradient id="windowLight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe2a8"/><stop offset="1" stop-color="#ff9a45"/></linearGradient>
   <radialGradient id="smoke"><stop offset="0" stop-color="#a9b8d0" stop-opacity=".55"/><stop offset=".55" stop-color="#93a5c2" stop-opacity=".22"/><stop offset="1" stop-color="#8fa3c0" stop-opacity="0"/></radialGradient>
   <radialGradient id="vignette" cx=".5" cy=".46" r=".75"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></radialGradient>
-  <pattern id="grain" width="160" height="160" patternUnits="userSpaceOnUse">${['#fff', '#000'].map(c => `<path d="${Array.from({ length: 130 }, () => `M${Math.floor(R(0, 160))} ${Math.floor(R(0, 160))}h1`).join('')}" stroke="${c}" stroke-width="1"/>`).join('')}</pattern>
+  <pattern id="grain" width="160" height="160" patternUnits="userSpaceOnUse">${['#fff', '#000'].map(c => `<path d="${Array.from({ length: 95 }, () => `M${Math.floor(R(0, 160))} ${Math.floor(R(0, 160))}h1`).join('')}" stroke="${c}" stroke-width="1"/>`).join('')}</pattern>
 </defs>
 <style>${style.replace(/\s*\n\s*/g, '')}</style>
 ${sky}
@@ -660,7 +671,8 @@ ${DIAG ? diagBadge : ''}
 
 if (svg.includes('`') || svg.includes('${')) throw new Error('the scene cannot contain ` or ${')
 // Eleven wind levels, -5 to 5. Each also gives the aurora its own length.
-const AURORA_LENGTH = [1.25, 0.85, 1.1, 0.92, 1.18, 1, 0.82, 1.15, 0.95, 1.3, 0.88]
+// Neighbouring levels differ little, so a change of wind is a small step.
+const AURORA_LENGTH = Array.from({ length: 11 }, (_, i) => +(1.02 + 0.2 * Math.cos((i * Math.PI) / 5 + 0.6)).toFixed(2))
 const WINDS = AURORA_LENGTH.map((len, i) => {
   const w = (i - 5) / 5
   return windLoops.map(({ cls, samples, fn }) => kf(cls, Array.from({ length: samples + 1 }, (_, k) => [(k / samples) * 100, fn(k / samples, w, len)]))).join('')
@@ -668,7 +680,7 @@ const WINDS = AURORA_LENGTH.map((len, i) => {
 const [HEAD, TAIL] = svg.split('@WIND@')
 const longest = Math.max(...WINDS.map(css => HEAD.length + css.length + TAIL.length))
 const svgOut = process.argv[2]
-if (svgOut) writeFileSync(svgOut, HEAD + WINDS[Number(process.env.WIND ?? 2) + 5] + TAIL)
+if (svgOut) writeFileSync(svgOut, (HEAD + WINDS[Number(process.env.WIND ?? 2) + 5] + TAIL).replace(/@D([\d.]+)@/g, (_, base) => `-${base}s`))
 if (longest > 131072) throw new Error(`the scene is ${longest} characters; the limit is 131072`)
 // The scene's name carries a hash of its markup, so a surface that keeps the
 // drawing of a name it has seen still redraws when the scene changes.

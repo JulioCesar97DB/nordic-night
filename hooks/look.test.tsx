@@ -9,6 +9,8 @@ const BACKDROP = {
   requestId: 'theme-1',
   props: { scene: `${SCENE_ID}_w7`, plugin: 'nordic-night', glass: { blur: 8, opacity: 0.4 } },
 } as const
+// A fixed moment for the engine's clock: 2026-11-15T12:00:00Z.
+const NOW = 1794744000000
 
 test('session start sets the dark look with the nordic scene and a light frost', async ($, on) => {
   const sets: ThemeSetArgs[] = []
@@ -19,6 +21,8 @@ test('session start sets the dark look with the nordic scene and a light frost',
     return { value: { isDrawn: true, requestId: 'theme-1' } }
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('clock.now', () => ({ value: NOW }))
+  on('clock.every', () => ({ value: undefined }))
 
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
 
@@ -31,7 +35,8 @@ test('session start sets the dark look with the nordic scene and a light frost',
   expect(sets[0]?.colors !== undefined).toBe(true)
 })
 
-test('desktop and mobile draw the scene as an SVG within the size limit', async $ => {
+test('desktop and mobile draw the scene as an SVG within the size limit', async ($, on) => {
+  on('clock.now', () => ({ value: NOW }))
   for (const surface of ['desktop', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...BACKDROP, surface })
     const svg = await ui.find({ type: 'Svg' })
@@ -39,6 +44,19 @@ test('desktop and mobile draw the scene as an SVG within the size limit', async 
     expect(svg !== undefined).toBe(true)
     await ui.unmount()
   }
+})
+
+test('the scene leaves a clock slot on every animation and the mod fills them', async ($, on) => {
+  on('clock.now', () => ({ value: NOW }))
+  expect((SCENE_HEAD.match(/@D[\d.]+@/g) ?? []).length > 40).toBe(true)
+  const ui = await $.ui.mount({ ...BACKDROP, surface: 'desktop' })
+  const svg = await ui.find({ type: 'Svg' })
+  const source = String(svg?.props.source ?? '')
+
+  expect(source.includes('@D')).toBe(false)
+  expect(/animation-delay:-[\d.]+s/.test(source)).toBe(true)
+  expect(source.length <= 131072).toBe(true)
+  await ui.unmount()
 })
 
 test('a backdrop another plugin set is left to it', async ($, on) => {
